@@ -144,43 +144,69 @@ Using the~$\boldq_n$ estimates from the Expectation Step, derive an update for m
 \subsection*{Solution}
 
 \begin{enumerate}
-  \item
-  \item 
-  \item 
+  \item $$ \sum^N_{n=1}log[\sum^k_{k=1}P(x_n,\theta,\beta_k)]$$, unfortunately there is a summation over k inside the log term, which makes this impossible to solve. 9.1 in textbook has more details. 
+  \item $$\sum^N_{n=1}\sum^K_{k=1}z_{nk}log(\frac{\beta^\alpha_k}{\Gamma(\alpha)}x^{\alpha-1}e^{-\beta_kx_n} * \prod_k \theta_k^{z_nk})$$
+  This is solvable, but only if we know Z. We can get this expression since our expected complete log likeliehood can be defined as $$\sum^N_{n=1}log(p(x_n|z_n;\beta_k)p(z_n|\theta))$$ then we plug in our gamma pdf and use power trick to obtain our answer, yay!
+  \item we know that each entry in qn is proportional to $P(x_n|z_n=C_k,\beta_k)*P(z_n=C_k|\theta)$ for class k, and we can plug in gamma pdf times power trick and then normalize to get that index k is  $$\frac{gamma(x_n,\beta_k,\alpha) * \prod_k\theta_k^{z_{nk}}}{\sum_k gamma(x_n,\beta_k,\alpha) * \prod_k\theta_k^{z_{nk}} }$$ Where gamma means the gamma pdf for the probability that $x_n = C_k$, aka we plug $\beta_k, \alpha, x_n$ into gamma pdf  
   \item 
     \begin{enumerate}
+      \item $$\sum^N_{n=1}\sum^K_{k=1}q_{nk}ln(\prod_k\theta_k^{C_k}) + q_{nk}ln(gamma(x_n,\alpha,\beta_k))$$ Where "gamma" has the same definition from q3. This is derived through the same process used in 2.1 of the section notes, only we plug in for our probabilities at the end. (write out complete data log likelyhood,then take expected value). 
+      \item Take derivative of previous expression plus $-\lambda(\sum_k\theta_k-1)$, our lagrange term and set equal to zero. Our term with gamma doesn't include $\theta$, so it can be ignored. This leaves a simple derivative, which yields:
+      $$\frac{\sum^N_{n=1}q_{nk}}{\lambda} = \theta_k$$
+      However, we aren't done yet. Now we need to solve for $\lambda$, and we can easily do so by summing over our obtained equation to incude all thetas, which should sum to 1. Then we get that $\lambda = \sum_k\sum_Nq_{nk} = N$,
+      so our answer is 
+      $$\frac{\sum^N_{n=1}q_{nk}}{N} = \theta_k$$
+      This makes inuitive sense because Z is sampled by a categorical of theta, so of course the best value for $\theta_k$ would be the average of the probabilities over the data that $z_n$ is equal to that class. 
       \item 
-      \item 
-      \item 
+      Now we take derivative with respect to $\beta_k$ with the lagrange term and set to zero. 
+      Fortunately, the only term that has a beta in it is the gamma term, so we write out gamma pdf remove the other terms and take derivative to get $$\sum_Nq_{nk}(\frac{\alpha}{\beta} - x_n) = 0$$
+      Then we can simplify to get 
+      $$\frac{\alpha\sum_Nq_{nk}}{\sum_Nq_{nk}x_n} = \beta_k$$
+      
+      Beta is indicates how much the distribution leans leftward from alpha. As beta gets larger than alpha, the distribution leans left and when its smaller it leans right. Summing over the probabilities for $z_n$ and multiplying by alpha and then dividing by the same sum but each weighted by their respective data point gives us how much the distribution for modeling $x|z$ shifts in relation to alpha. 
+      
+      
     \end{enumerate}
   \item 
+  We want a distribution for $Z|X$, We can reuse our generative model to estimate beta, allowing us to form distributions on $x|z$. In turn, we can do $P(z) * P(x|z)$ (we have p(z) now thanks to z being given), to get something proportional to the probability $z|x$, and then normalize that between 0 and 1 by calculating the probabilities for $x|z$ for all classes, and dividing by that number.
   \item 
     Plot:
 
-    % \includegraphics[width=\linewidth]{p1}
+    \includegraphics[width=\linewidth]{HW5/Screenshot (162).png}
 
     Code:
 
     \begin{python}
 def e_step(theta, betas):
-    q = 'not implemented'
-    return q
+    
+    proportional = gamma.logpdf(x,alpha, scale=1/betas) + np.log(theta)
+ 
+        
+    q = np.subtract(proportional,logsumexp(proportional,axis=1, keepdims=True))
+
+
+    return (np.exp(q))
 
 
 def m_step(q):
-    theta_hat = 'not implemented'
-    beta_hats = 'not implemented'
+
+    
+    theta_hat = q.sum(0) / len(q)
+    beta_hats = (q.sum(0) * alpha) / (q*x).sum(0)
+    
     return theta_hat, beta_hats
 
 
 def log_px(x, theta, betas):
-    p = 'not implemented'
-    return p
+    p = gamma.logpdf(x,alpha,scale=1/betas) + np.log(theta)
+    return logsumexp(p,axis=1)
 
 
 def run_em(theta, betas, iterations=1000):
-    theta = 'not implemented'
-    betas = 'not implemented'
+    while iterations > 0:
+      q = e_step(theta, betas)
+      theta,betas = m_step(q)
+      iterations = iterations -1 
     return theta, betas
     \end{python}
 \end{enumerate}
@@ -252,35 +278,61 @@ For this problem you will implement PCA from scratch on the first 6000 images of
 \subsection*{Solution}
 Plots:
 
-% \includegraphics[width=\linewidth]{p2_cfvs}
+ \includegraphics[width=\linewidth]{HW5/p2_cfvs (6).pdf}
 
-% \includegraphics[width=0.25\linewidth]{p2_mean}
-% \includegraphics[width=0.75\linewidth]{p2_pcomps}
+\includegraphics[width=0.25\linewidth]{p2_mean}
+\includegraphics[width=0.75\linewidth]{p2_pcomps}
 
-Code:
+
 
 \begin{python}
+from re import X
 def pca(x, n_comps=500):
-    top_eigvals = 'not implemented'
-    top_pcomps = 'not implemented'
+    
+    xmean = np.mean(x,axis=0)
+    x = np.subtract(x,xmean) #subtract mean from datapoints
+    cov = x.T@x/N # find covariance matrix
+    u,sig,v = np.linalg.svd(cov)
+    top_eigvals = sig[:n_comps] #no need to square, since np.linalg.svd does cov@cov.t or cov.T@cov first
+    top_pcomps = v[:n_comps] 
+
+
+
     return top_eigvals, top_pcomps
 
 
 def calc_cfvs(eigvals):
-    cum_frac_vars = 'not implemented'
+    cum_frac_vars = np.cumsum(eigvals)/np.sum(eigvals)
     return cum_frac_vars
 
 
 def calc_errs(x, pcomps):
-    err_mean = 'not implemented'
-    err_pcomp = 'not implemented'
+    x_mean = np.array([np.mean(x,axis=0)])
+    xmean = x - x_mean
+    err_mean = (np.linalg.norm(x-x_mean))**2/6000
+    reduced = pcomps@xmean.T # calculating time series, decomposing dataset into principal components
+    reconst = pcomps.T@reduced # reconstructing dataset
+    recontmean = reconst + x_mean.T #transposes for getting around stupid broadcasting reqs
+
+
+    err_pcomp = ((np.linalg.norm(x-recontmean.T, axis=1))**2).mean()
+
+
     return err_mean, err_pcomp
 \end{python}
 
 \begin{enumerate}
-  \item 
-  \item 
-  \item 
+  \item As K increases, the variance explained increases very rapidly at first and then slows down, getting closer and closer to 1 over time. Meanwhile, the eigenvalues graph is the opposite of this which makes sense since each eigenvalue is variance from that eigenvector. 
+  
+  \item The principal components look similar to the standardized kmeans plots as they kinda have the white circles at the edges of the principal components. 
+  although these ones don't really represent numbers like the kmeans clusteroids did. While u may be able to make out 1 or 2 numbers, the principal components are really just common ways in which the pixels may be arrayed so that we can reconstruct the data the best with that vector. While kmeans foccuses on good clusters, here we are fousing on storing data with orthogonal vectors. 
+  
+  \item Reconstruction error (using mean): 3.435796e+06
+Reconstruction error (using mean and top 10 pcomps): 1.731315e+06
+Final objective loss: estimating based on graph from last pset, error was approx 7e8, and need to divide that by number of datapoints which was 300, which yields an error of approx 2.333e+06, which is much higher than PCA but lower than using mean, which makes sense since mean is just using kmeans with k = 1. However, while kmeans may have better served for giving us clusters that represnt actual numbers, PCA seems to have much lower loss. This makes sense given that PCA is a method that minimizes reconstruction loss by projecting to orthogonal axises optimally, rather than finding good clusters. 
+
+  \item Rotating the principal components would change the basis to which we are projecting, and would decrease the amount of variance explained by the first few components which is what we are maximizing with PCA.This could increase Reconstruction error, however, the rotation can be used to see how much components vary along a specific axis, which is helpful for interpreting specifics when one has prior knowledge about the dataset. 
+Code:
 \end{enumerate}
 
 \newpage
@@ -382,13 +434,32 @@ questions and show your work (i.e., state what the blocking path(s) is/are and w
 \newpage
 \section*{Solution}
 \begin{enumerate}
+  \item No, since weekend gives us information about traveling, which gives us information about getting sleep.
+  \item Yes
+  \item No, since we know exotic foods. (If friends over mean high chance of exotic food but it doesnt happen and sick means low chance of exotic food, and we know he ate exotic food, then knowing he was sick indicates high chance friends over because sick and then eat exotic food unlikely)
+  \item No, friends over is connected via weekend - traveling - get sleep
+  \item yes
+  \item \begin{center}
+\begin{tikzpicture}[
+  node distance=1cm and .5cm,
+  bn/.style={draw,ellipse,text width=2cm,align=center}
+    ]
+    \node[bn] (w) {\attr{Weekend}};
+    \node[bn,below right=of w] (t) {\attr{Traveling}};
+    \node[bn,right=of t] (s) {\attr{Sick}};
+    \node[bn,below left=of w] (f) {\attr{Friends over}};
+    \node[bn,below right=of f] (eef) {\attr{Eat exotic foods}};
+    \node[bn,right=of eef] (gs) {\attr{Get sleep}};
+    \path (w) edge[-latex] (t)
+    (w) edge[-latex] (f)
+    (f) edge[-latex] (eef)
+    (t) edge[-latex] (eef)
+    (s) edge[-latex] (gs)
+    (s) edge[-latex] (eef);
+    \end{tikzpicture}
+\end{center}
   \item 
-  \item 
-  \item 
-  \item 
-  \item 
-  \item 
-  \item 
+  yes, however, observing eat exotic foods can change this. Eat exotic foods is unobserved, so it blocks information flow to get sleep under d seperation rules.  Because if no friends over, traveling/sick informs exotic food, so we get a bit of information about those two, which gives us a bit of information about get sleep. 
 \end{enumerate}
 
 \newpage
@@ -396,11 +467,12 @@ questions and show your work (i.e., state what the blocking path(s) is/are and w
 % Name and Calibration
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsection*{Name}
+Johan Vlassak
 
 \subsection*{Collaborators and Resources}
 Whom did you work with, and did you use any resources beyond cs181-textbook and your notes?
-
+I worked with a few people at office hours and np documentation. I worked with Kidist and Luke aswell. 
 \subsection*{Calibration}
 Approximately how long did this homework take you to complete (in hours)? 
-
+15
 \end{document}
